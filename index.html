@@ -29,8 +29,10 @@
 
     <!--入力部分-->
     <div class="top" id="top">
+        ※先行ドロー想定です。後攻は考慮してません。<br>
         ※初動札が多すぎると処理に時間がかかります。<br>
-        初動7枚以上から組み合わせパターンが爆発的に増えるので、4,5枚くらいが実用範囲です。
+        枚数の割り振りがおかしくても動いてしまうので、その辺は自己判断で使ってください。
+        <!--初動7枚以上から組み合わせパターンが爆発的に増えるので、4,5枚くらいが実用範囲です。<br>-->
         <div>
             デッキ総数：<input class="top_deck" id="top_deck" type="number" maxlength="2" min="40" max="60" value="40" />
             <button class="top_add" id="top_add">初動パーツ追加</button>
@@ -47,6 +49,24 @@
                         <option value="1">1枚</option>
                         <option value="2">2枚</option>
                         <option value="3" selected>3枚</option>
+                        <option value="" disabled>▼まとめて使用する用</option>
+                        <option value="4">4枚</option>
+                        <option value="5">5枚</option>
+                        <option value="6">6枚</option>
+                        <option value="7">7枚</option>
+                        <option value="8">8枚</option>
+                        <option value="9">9枚</option>
+                        <option value="10">10枚</option>
+                        <option value="11">11枚</option>
+                        <option value="12">12枚</option>
+                        <option value="13">13枚</option>
+                        <option value="14">14枚</option>
+                        <option value="15">15枚</option>
+                        <option value="16">16枚</option>
+                        <option value="17">17枚</option>
+                        <option value="18">18枚</option>
+                        <option value="19">19枚</option>
+                        <option value="20">20枚</option>
                     </select>
                 </td>
             </tr>
@@ -56,6 +76,14 @@
     <!--選択部分-->
     <div class="pattern" id="pattern">
         <div>
+            パターン最大枚数：
+            <select class="pattern_max" id="pattern_max">
+                <option value="1">1枚</option>
+                <option value="2">2枚</option>
+                <option value="3">3枚</option>
+                <option value="4"selected>4枚</option>
+                <option value="5">5枚</option>
+            </select>
             <button class="pattern_set" id="pattern_set">初動パーツ確定</button>
             <span id="pattern_error"></span>
         </div>
@@ -323,9 +351,15 @@ function pattern_generate() {
         }
     }
 
-    let pData   = [];   // 実データ貯めこみ
-    let pTemp   = [];   // 一時保持用
-    for( let getLen = listUp.length; getLen > 0; getLen-- ) {
+    let pData           = [];   // 実データ貯めこみ
+    let pTemp           = [];   // 一時保持用
+
+    // パターン組み合わせの最大数取得
+    let patternSetMax   = parseInt( getId("pattern_max").value, 10 );
+    let loopSetting     = patternSetMax;
+    if( listUp.length < patternSetMax ) loopSetting     = listUp.length;
+//  for( let getLen = listUp.length; getLen > 0; getLen-- ) {
+    for( let getLen = loopSetting; getLen > 0; getLen-- ) {
         // 回帰処理を使ってぶん回して全パターンため込む
         fGetP( listUp, pData, pTemp, getLen, 1 );
         pTemp = null;
