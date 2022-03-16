@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title>初動ちぇっか～</title>
+    <style>
+        div { padding: 3pt; }
+
+        button.top_add { padding: 1pt 8pt 1pt 8pt; }
+        input.card_name { width: 150pt; }
+        select.card_count { width: 60pt; }
+
+        table { border-collapse: collapse; }
+        tr.card_input { border: 1pt solid #c8c8c8; }
+        td {
+            padding: 3pt;
+            padding-right: 8pt;
+        }
+
+        button.pattern_set { padding: 1pt 8pt 1pt 8pt; }
+        tr.pattern_select { border: 1pt solid #c8c8c8; }
+        td.pattern_select_scount { border-right: 1pt solid #c8c8c8; }
+        td.pattern_select_name { border-right: 1pt solid #c8c8c8; }
+
+    </style>
+</head>
+
+<body id="contents" hidden>
+
+    <!--入力部分-->
+    <div class="top" id="top">
+        ※初動札が多すぎると処理に時間がかかります。<br>
+        初動7枚以上から組み合わせパターンが爆発的に増えるので、4,5枚くらいが実用範囲です。
+        <div>
+            デッキ総数：<input class="top_deck" id="top_deck" type="number" maxlength="2" min="40" max="60" value="40" />
+            <button class="top_add" id="top_add">初動パーツ追加</button>
+            <span id="top_error"></span>
+        </div>
+
+        <table class="card_input_table" id="card_input_table" >
+            <tr class="card_input" id="card_input_clone" hidden>
+                <td id="card_input_value" hidden></td>
+                <td><button class="card_del" id="card_del" onclick="add_delete_button(value)">削除</button></td>
+                <td>カード名：<input class="card_name" id="card_name" maxlength="100" /></td>
+                <td>投入枚数：
+                    <select class="card_count" id="card_count">
+                        <option value="1">1枚</option>
+                        <option value="2">2枚</option>
+                        <option value="3" selected>3枚</option>
+                    </select>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <!--選択部分-->
+    <div class="pattern" id="pattern">
+        <div>
+            <button class="pattern_set" id="pattern_set">初動パーツ確定</button>
+            <span id="pattern_error"></span>
+        </div>
+
+        <!--必要数,パターンカード名,初動有効-->
+        <table class="pattern_table" id="pattern_table" >
+            <tr class="pattern_select" id="pattern_select_clone" hidden>
+                <td class="pattern_select_data" id="pattern_select_data" hidden></td>
+                <td class="pattern_select_scount" id="pattern_select_scount"></td>
+                <td class="pattern_select_name" id="pattern_select_name"></td>
+                <td class="pattern_select_check" id="pattern_select_check">
+                    初動有効：
+                    <input class="pattern_select_checkbox" id="pattern_select_checkbox" type="checkbox" checked/>
+                </td>
+            </tr>
+        </table>
+
+        <div id="shuffle" hidden>
+            シャッフル回数：<input class="shuffle_max" id="shuffle_max" type="number" maxlength="5" min="10" max="10000" value="5000" />
+            <button class="shuffle_button" id="shuffle_button" >シャッフル開始！</button>
+            <div id="shuffle_result"></div>
+        </div>
+    </div>
+
+</body>
+
+<script>
+'use strict';
+
+// ******************************
+// 共通処理
+// ******************************
+// エレメントID取得(面倒だったので短縮)
+function getId( a_IdName = "" ) {
+    if( a_IdName == undefined )     return  null;
+    a_IdName    = a_IdName.toString();
+    return  document.getElementById(a_IdName);
+}
+
+
+// ******************************
+// グローバル変数
+// ******************************
+const INPUT_TABLE   = "card_input_table";
+const INPUT_LINE    = "card_input";
+const INPUT_VALUE   = "card_input_value";
+
+const BUTTON_DELETE = "card_del";
+const INPUT_CNAME   = "card_name";
+const INPUT_CCOUNT  = "card_count";
+
+const PSEL_TABLE    = "pattern_table";
+const PSEL_LINE     = "pattern_select";
+const PSEL_DATA     = "pattern_select_data";
+const PSEL_SCOUNT   = "pattern_select_scount";
+const PSEL_NAME     = "pattern_select_name";
+const PSEL_CHECK    = "pattern_select_check";
+const PSEL_CHECKBOX = "pattern_select_checkbox";
+
+const SH_DIV        = "shuffle";
+const SH_RESULT     = "shuffle_result";
+
+const SH_RAM        = 1;
+const SH_CARDNUM    = 2;
+const SH_NAME       = 3;
+
+var g_InputCount;
+
+
+// ******************************
+// 起動処理
+// ******************************
+// onload
+window.onload = function() {
+    // 動作埋め込み処理
+    setProcess();
+    // その他初期処理
+    initialize();
+    // 画面を表示させる
+    let idName = "contents";
+    if( getId(idName) != null ) { getId(idName).hidden = false; }
+}
+
+// 動作埋め込み用
+function setProcess() {
+    let idNameAdd = "top_add";
+    if( getId(idNameAdd) != null ) {
+        getId(idNameAdd).onclick        = add_input_line;
+    }
+
+    let idNamePattern = "pattern_set";
+    if( getId(idNamePattern) != null ) {
+        getId(idNamePattern).onclick    = viewPattern;
+    }
+
+    let idShuffle = "shuffle_button";
+    if( getId(idShuffle) != null ) {
+        getId(idShuffle).onclick        = shuffle_process;
+    }
+}
+
+// その他初期処理
+function initialize() {
+    g_InputCount    = 0;
+    // とりあえず3行だけ初期表示
+    for( let i = 0; i < 3; i++ ) {
+        add_input_line();
+    }
+}
+
+
+// ******************************
+// 各種処理
+// ******************************
+// カード入力1行追加
+function add_input_line() {
+    if( g_InputCount > 99999 ) {
+        getId("top_error").innerText = "パーツ追加押しすぎでバグるのでもう追加できません。リロードしたりしてやり直してね。";
+        return  null;
+    }
+
+    // 番号の確定、クローンベースとクローン用の変数を作成
+    let number      = ("00000" + g_InputCount.toString()).slice(-5);
+    let cloneBase   = getId("card_input_clone");
+    let clone       = cloneBase.cloneNode(true);
+
+    // 追加された要素の削除ボタンIDだけは変更する必要がある(どのボタンが押下されたのか判別するため)
+    let cn      = clone.childNodes;
+    let bEnd    = false;
+    for( let i = 0; i < cn.length; i++ ) {
+        // tr要素側の変更
+        if( cn[i].id == INPUT_VALUE ) {
+            cn[i].innerText = number.toString();
+        }
+        // td別要素の変更
+        for( let j = 0; j < cn[i].childNodes.length; j++ ) {
+            if( cn[i].childNodes[j].id == BUTTON_DELETE ) {
+                cn[i].childNodes[j].value = number.toString();
+                continue;
+            }
+            if( cn[i].childNodes[j].id == INPUT_CNAME || cn[i].childNodes[j].id == INPUT_CCOUNT ) {
+                if( cn[i].childNodes[j].id == INPUT_CNAME ) {
+                    cn[i].childNodes[j].value = "初動札" + (parseInt( number.toString(), 10 )+1).toString();
+                }
+                cn[i].childNodes[j].id  = cn[i].childNodes[j].id + "_" + number.toString();
+                continue;
+            }
+        }
+    }
+
+    // id=card_input_XXX の形で要素を追加
+    clone.id        = INPUT_LINE + "_" + number.toString();
+    clone.hidden    = false;
+    getId(INPUT_TABLE).appendChild(clone);
+
+    pattern_initialize();
+    g_InputCount++;
+}
+
+// 1行削除
+function add_delete_button( a_value ) {
+    // 入力データが1個しかないなら押せなくする
+    let inputList   = getId(INPUT_TABLE).children;
+    if( inputList.length <= 2 ) return;
+    // 削除処理
+    let del_id  = INPUT_LINE + "_" + a_value;
+    getId(del_id).remove();
+    pattern_initialize();
+}
+
+// パターン関係初期化処理
+function pattern_initialize() {
+    // 隠しとremove
+    getId(SH_DIV).hidden       = true;
+    getId(SH_RESULT).innerText = "";
+    let pselList    = getId(PSEL_TABLE).children;
+    for( let i = pselList.length - 1 ; i > 0; i-- ) {
+        if( pselList[i].id != null || pselList[i].id != undefined ) {
+            getId(pselList[i].id.toString()).remove();
+        }
+    }
+}
+
+// パターン生成
+function pattern_generate() {
+    // グローバル数まで回してチェック
+    let list    = [];
+    let listUp  = [];
+    for( let i = 0; i < g_InputCount; i++ ) {
+        let number      = ("00000" + i.toString()).slice(-5);
+        let findName    = INPUT_LINE + "_" + number.toString();
+        if( getId(findName) == null || getId(findName) == undefined )   continue;
+        list.push(getId(findName));
+    }
+
+    let error = false;
+    for( let i = 0; i < list.length; i++ ) {
+        for( let j = 0; j < list[i].childNodes.length; j++ ) {
+            // 名称取得
+            if( list[i].childNodes[j].id == INPUT_VALUE ) {
+                // エラーチェック：カード名に入力がないのは流石にNG
+                let idName      = INPUT_CNAME + "_" + list[i].childNodes[j].innerText;
+                let cardName    = getId(idName).value;
+                if( cardName == "" || cardName == " " ) {
+                    error   = true;
+                }
+                // 既にリストアップ済みの名称と同一もNG
+                for( let k = 0; k < listUp.length; k++ ) {
+                    if( cardName == listUp[k].toString() ) {
+                        error   = true;
+                        break;
+                    }
+                }
+                // リストアップに埋め込み
+                if( error ) break;
+                listUp.push(cardName);
+            }
+        }
+        if( error ) break;
+    }
+
+    // エラーチェック
+    getId("pattern_error").innerText = "";
+    if( error ) {
+        getId("pattern_error").innerText = "カード名全埋めされていないか、同一名称が混ざっていて確定できません";
+        return  null;
+    }
+
+    // ため込み回帰処理
+    let fGetP   = function ( a_listUp, a_pData, a_pTemp, a_getLen, a_regCount ) {
+        // 前回値のコピーを取る
+        let beforeTemp  = a_pTemp.concat();
+        // iは起点
+        for( let i = 0; i < a_listUp.length; i++ ) {
+            // データをセット
+            a_pTemp.push( i.toString() );
+            // 回帰回数のカウントがレングス以下なら回帰する必要がある
+            if( a_regCount < a_getLen ) {
+                // 回帰
+                fGetP( a_listUp, a_pData, a_pTemp, a_getLen, a_regCount + 1 );
+                // 回帰後は保持を前回値にしてからコンテニュー
+                a_pTemp = null;
+                a_pTemp = [];
+                a_pTemp = beforeTemp.concat();
+                continue;
+            }
+            // 保持予定のレングスならデータを溜めて前回値に戻す
+            if( a_pTemp.length >= a_getLen ) {
+                // ただし取得値の中身で同一のモノが含まれているならデータとしては認めない
+                let bSame   = false;
+                if( a_pTemp.length > 1 ) {
+                    for( let chk1 = 0; chk1 < a_pTemp.length; chk1++ ) {
+                        for( let chk2 = chk1+1; chk2 < a_pTemp.length; chk2++ ) {
+                            if( a_pTemp[chk1] == a_pTemp[chk2] )    bSame   = true;
+                            if( bSame ) break;
+                        }
+                        if( bSame ) break;
+                    }
+                }
+                if( !bSame )    a_pData.push( a_pTemp.concat() );
+                a_pTemp = null;
+                a_pTemp = [];
+                a_pTemp = beforeTemp.concat();
+            }
+        }
+    }
+
+    let pData   = [];   // 実データ貯めこみ
+    let pTemp   = [];   // 一時保持用
+    for( let getLen = listUp.length; getLen > 0; getLen-- ) {
+        // 回帰処理を使ってぶん回して全パターンため込む
+        fGetP( listUp, pData, pTemp, getLen, 1 );
+        pTemp = null;
+        pTemp = [];
+    }
+
+    // 溜めたデータの中身を一度ソートし、比較できるようにする
+    let progCount   = 0;    // 0:ソート、1:空化、2:削除
+    while( progCount < 3 ) {
+        for( let i = 0; i < pData.length; i++ ) {
+            // ソート
+            if( progCount == 0 ) {
+                pData[i].sort( ( a, b ) => { return  a - b; } );
+            }
+            // 同一値を一旦空にする
+            if( progCount == 1 ) {
+                for( let j = i+1; j < pData.length; j++ ) {
+                    if( pData[i].toString() == pData[j].toString() )  pData[j]  = "";
+                }
+            }
+            // 空になったデータを削除
+            if( progCount == 2 ) {
+                // pData = pData.filter(v=>v);
+                pData = pData.filter(x => x !== "" && x !== undefined && x !== null);
+            }
+        }
+        progCount++;
+    }
+
+    return  pData;
+}
+
+// パターンをもとにデータをセット
+function viewPattern() {
+
+    // 最初に隠しとremoveが必要
+    pattern_initialize();
+
+    // データ取得
+    let pattern = pattern_generate();
+    if( pattern == null || pattern == undefined )   return;
+
+    // カード名取得のためにグローバル数まで回してリスト取得
+    let cardList    = [];
+    for( let i = 0; i < g_InputCount; i++ ) {
+        let cNumber      = ("00000" + i.toString()).slice(-5);
+        let findName    = INPUT_CNAME + "_" + cNumber.toString();
+        if( getId(findName) == null || getId(findName) == undefined )   continue;
+        cardList.push(getId(findName).value);
+    }
+
+    // クローンを作成し当てはめていく
+    let cloneBase   = getId("pattern_select_clone");
+    for( let pI = 0; pI < pattern.length; pI++ ) {
+        let number      = ("00000000" + pI.toString()).slice(-8);
+        let clone       = cloneBase.cloneNode(true);
+
+        // 面倒なのでノード内のidに全部数値振り分け
+        let cn      = clone.childNodes;
+        for( let i = 0; i < cn.length; i++ ) {
+            // td別要素の変更
+            if( cn[i].id == PSEL_CHECK ) {
+                for( let j = 0; j < cn[i].childNodes.length; j++ ) {
+                    // チェックボックスのID変更
+                    if( cn[i].childNodes[j].id == PSEL_CHECKBOX ) {
+                        cn[i].childNodes[j].id  = cn[i].childNodes[j].id.toString() + "_" + number.toString();
+                        break;
+                    }
+                }
+            }
+            // tr要素側の変更
+            if( cn[i].id == PSEL_DATA || cn[i].id == PSEL_SCOUNT || cn[i].id == PSEL_NAME || cn[i].id == PSEL_CHECK ) {
+                cn[i].id    = cn[i].id.toString() + "_" + number.toString();
+            }
+        }
+
+        // id=pattern_select_XXXXXXXX の形で要素を追加
+        clone.id        = PSEL_LINE + "_" + number.toString();
+        clone.hidden    = false;
+        getId(PSEL_TABLE).appendChild(clone);
+
+        // データ当てはめ
+        getId(PSEL_DATA+"_"+number.toString()).innerText    = pattern[pI].toString();
+        getId(PSEL_SCOUNT+"_"+number.toString()).innerText  = pattern[pI].length.toString() + "枚初動";
+        let pSelName         = getId(PSEL_NAME+"_"+number.toString());
+        pSelName.innerText   = "";
+        for( let pJ = 0; pJ < pattern[pI].length; pJ++ ) {
+            if( pJ > 0 )   pSelName.innerText  += "＋";
+            pSelName.innerText  += cardList[pattern[pI][pJ]];
+        }
+    }
+
+    // シャッフルボタン出現
+    getId(SH_DIV).hidden    = false;
+}
+
+// シャッフル処理
+function shuffle_process( ) {
+
+    // デッキ総数とシャッフル回数がおかしくないか確認
+    let checkMaxDeck    = parseInt( getId("top_deck").value, 10 );
+    let checkShuffle    = parseInt( getId("shuffle_max").value, 10 );
+    let bError          = false;
+    if( checkMaxDeck > 60 || 40 > checkMaxDeck )    bError  = true;
+    if( checkShuffle > 10000 || 10 > checkShuffle ) bError  = true;
+    if( bError ) {
+        getId("shuffle_result").innerHTML    = "デッキ総数、またはシャッフル回数がなんかおかしいです。<br>";
+        getId("shuffle_result").innerHTML   += "シャッフルの最大値は10000までです。";
+        return;
+    }
+
+    // 初動有効データを取得
+    let validList   = [];
+    let tableList   = getId(PSEL_TABLE).children;
+    for( let i = 1; i < tableList.length; i++ ) {
+        let number      = ("00000000" + (i-1).toString()).slice(-8);
+        let findId      = PSEL_CHECKBOX + "_" + number.toString();
+        if( getId(findId).checked ) {
+            findId      = PSEL_DATA + "_" + number.toString();
+            validList.push( getId(findId).innerText.split(',') );
+        }
+    }
+
+    // ここで有効データが無ければエラー
+    if( validList.length  <= 0 ) {
+        getId("shuffle_result").innerText   = "有効チェックがありません。";
+        return;
+    }
+    getId("shuffle_result").innerText   = "";
+
+    // 仮想デッキ作成
+    /*
+        乱数番号,割り振り番号,カード番号,カード名
+        乱数番号:最初は0、シャッフル時に乱数割り振ってソートして...のやつ
+        割り振り:順番に指定する(一応)
+        カード番号:入力したカード名を入れておく番号、空の場合は-1
+        カード名:名前入れておく
+    */
+    let setNow      = 0;
+    let inputNow    = 0;
+    let virDeck     = [];
+    let maxDeck     = parseInt( getId("top_deck").value, 10 );
+    // 入力カード生成
+    for( let i = 0; i < g_InputCount; i++ ) {
+        let number      = ("00000" + i.toString()).slice(-5);
+        let findName    = INPUT_CNAME + "_" + number.toString();
+        let findCount   = INPUT_CCOUNT + "_" + number.toString();
+        if( getId(findName) == null || getId(findName) == undefined )   continue;
+        let cardCount   = parseInt( getId(findCount).value.toString(), 10 );
+        for( let j = 0; j < cardCount; j++ ) {
+            let virCard = [];
+            virCard.push(0);
+            virCard.push(setNow+1);
+            virCard.push(inputNow);
+            virCard.push(getId(findName).value);
+            virDeck.push(virCard.concat());
+            setNow++;
+        }
+        inputNow++;
+    }
+    // 空カード生成
+    while( setNow < maxDeck ) {
+        let virCard = [];
+        virCard.push(0);
+        virCard.push(setNow+1);
+        virCard.push(-1);
+        virCard.push("");
+        virDeck.push(virCard.concat());
+        setNow++;
+    }
+
+    // シャッフルループ
+    let shuffleResult   = [];
+    let loopMax         = parseInt( getId("shuffle_max").value,10 );
+    for( let loop = 0; loop < loopMax; loop++ ) {
+        // 乱数割り振り
+        for( let i = 0; i < virDeck.length; i++ ) {
+            virDeck[i][SH_RAM] = Math.random();
+        }
+        // ソート実行
+        virDeck.sort( ( a, b ) => { return  a[SH_RAM] - b[SH_RAM]; } );
+        // 初手5枚を収集、ただし初動以外のカードは収集しない
+        let tempResult  = [];
+        for( let i = 0; i < 5; i++ ){
+            if( virDeck[i][SH_CARDNUM] != -1 )  tempResult.push(virDeck[i].concat());
+        }
+        // 初手5枚の並びをソート
+        tempResult.sort( ( a, b ) => { return  a[SH_CARDNUM] - b[SH_CARDNUM]; } );
+        shuffleResult.push( tempResult.concat() );
+    }
+
+    // リザルト結果と初動有効を比較していく
+    let matchCounter    = 0;
+    for( let i = 0; i < shuffleResult.length; i++ ) {
+        let getResult   = [];
+        let numBefore   = -1;
+        // カード番号だけを取得して配列を生成
+        for( let j = 0; j < shuffleResult[i].length; j++ ) {
+            // 前回カード番号が同一だった場合は収集しない(初動有効との比較ができないのと、カード番号はかぶらないため)
+            if( numBefore == parseInt(shuffleResult[i][j][SH_CARDNUM].toString(),10) )  continue;
+            getResult.push(shuffleResult[i][j][SH_CARDNUM].toString());
+            numBefore   = parseInt(shuffleResult[i][j][SH_CARDNUM].toString(),10);
+        }
+        // 初動以外のカードだった場合は空なのでスルー
+        if( getResult.length <= 0 ) continue;
+        // 初動有効データと一致するか確認
+        let bMatch  = false;
+        for( let v = 0; v < validList.length; v++ ) {
+            let validString     = validList[v].toString();
+            let resultString    = getResult.toString();
+            if( validString == resultString )   bMatch  = true;
+            if( bMatch )    break;
+        }
+        if( bMatch ) {
+            matchCounter++;
+        }
+    }
+
+    // 確率出し
+    let per = ( matchCounter / loopMax ) * 1000;
+    per     = Math.round( per ) / 10;
+    getId("shuffle_result").innerHTML    = "有効だった初動は" + matchCounter.toString() + "回でした<br>";
+    getId("shuffle_result").innerHTML   += "確率：約" + per.toString() + "％";
+}
+
+</script>
+</html>
