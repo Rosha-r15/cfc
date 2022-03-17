@@ -565,12 +565,19 @@ function shuffle_process( ) {
         }
         // 初動以外のカードだった場合は空なのでスルー
         if( getResult.length <= 0 ) continue;
-        // 初動有効データと一致するか確認
-        let bMatch  = false;
+        // 初動有効データと一致するか(含まれるか)確認
+        let bMatch      = false;
+        let validMatch  = 0;
+        // 初動有効数
         for( let v = 0; v < validList.length; v++ ) {
-            let validString     = validList[v].toString();
-            let resultString    = getResult.toString();
-            if( validString == resultString )   bMatch  = true;
+            // 初期化
+            validMatch    = 0;
+            // 初動内手札内容と実際の手札から存在の確認をする
+            for( let vv = 0; vv < validList[v].length; vv++ ) {
+                if( getResult.indexOf(validList[v][vv]) != -1 ) { validMatch++; }
+            }
+            // 一致数が有効数と同じになった場合マッチした扱いになる
+            if( validMatch >= validList[v].length ) bMatch  = true;
             if( bMatch )    break;
         }
         if( bMatch ) {
